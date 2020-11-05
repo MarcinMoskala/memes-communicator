@@ -1,1 +1,1 @@
-web:    java -jar target/helloworld.jar
+web: java -jar build/libs/ktor-heroku-getting-started-1.0.jar
