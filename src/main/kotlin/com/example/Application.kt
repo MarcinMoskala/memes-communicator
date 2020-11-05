@@ -3,6 +3,8 @@ package com.example
 import com.google.gson.Gson
 import io.ktor.application.call
 import io.ktor.application.install
+import io.ktor.application.log
+import io.ktor.features.CallLogging
 import io.ktor.http.ContentType
 import io.ktor.http.cio.websocket.DefaultWebSocketSession
 import io.ktor.http.cio.websocket.Frame
@@ -15,7 +17,56 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.websocket.WebSockets
 import io.ktor.websocket.webSocket
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.slf4j.event.Level
 import java.time.Duration
+import java.util.logging.Logger
+
+class MemesRepository {
+    private val memes = mutableListOf<Meme>()
+    private val mutex = Mutex()
+
+    suspend fun currentMemes(): Memes = mutex.withLock {
+        Memes(memes.toList())
+    }
+
+    suspend fun addMeme(meme: Meme): Unit = mutex.withLock {
+        logger.info("Adding meme $meme")
+        memes += meme
+    }
+
+    companion object {
+        val logger = Logger.getLogger("MemesRepository")
+    }
+}
+
+class ConnectionsService(private val memesRepository: MemesRepository) {
+    private val connections = mutableListOf<DefaultWebSocketSession>()
+    private val mutex = Mutex()
+
+    suspend fun addConnection(connection: DefaultWebSocketSession): Unit = mutex.withLock {
+        connections += connection
+    }
+
+    suspend fun removeConnection(connection: DefaultWebSocketSession): Unit = mutex.withLock {
+        connections -= connection
+    }
+
+    suspend fun sendToAll() {
+        connections.forEach { send(it, memesRepository.currentMemes()) }
+    }
+
+    suspend fun send(connection: DefaultWebSocketSession, memes: Memes? = null) = mutex.withLock {
+        val memes = memes ?: memesRepository.currentMemes()
+        logger.info("Sending memes ${memes}")
+        connection.outgoing.send(memesRepository.currentMemes().toJson().let(Frame::Text))
+    }
+
+    companion object {
+        val logger = Logger.getLogger("ConnectionsService")
+    }
+}
 
 fun main(args: Array<String>) {
     val jsonResponse = """{
@@ -24,13 +75,18 @@ fun main(args: Array<String>) {
         "description": "Pay water bill today",
     }"""
     embeddedServer(Netty, 8080) {
+
+        install(CallLogging) {
+            level = Level.INFO
+        }
+
         install(WebSockets) {
             pingPeriod = Duration.ofMinutes(1)
         }
 
         install(Routing) {
-            val memes = mutableListOf<Meme>()
-            val connections = mutableListOf<DefaultWebSocketSession>()
+            val memesRepository = MemesRepository()
+            val connectionsRepository = ConnectionsService(memesRepository)
 
             get("/") {
                 call.respondText("Hello World!", ContentType.Text.Plain)
@@ -39,22 +95,20 @@ fun main(args: Array<String>) {
                 call.respondText(jsonResponse, ContentType.Application.Json)
             }
             webSocket("/ws") {
-                connections += this
-                outgoing.send(Memes(memes).toJson().let(Frame::Text))
+                connectionsRepository.addConnection(this)
+                connectionsRepository.send(this)
                 try {
                     for (msg in incoming) {
                         when (msg) {
                             is Frame.Text -> {
                                 val meme = msg.readText().fromJson<Meme>()
-                                memes += meme
-                                connections.forEach {
-                                    it.send(Memes(memes).toJson().let(Frame::Text))
-                                }
+                                memesRepository.addMeme(meme)
+                                connectionsRepository.sendToAll()
                             }
                         }
                     }
                 } finally {
-                    connections -= this
+                    connectionsRepository.removeConnection(this)
                 }
             }
         }
@@ -64,11 +118,11 @@ fun main(args: Array<String>) {
 fun Any.toJson(): String = Gson().toJson(this)
 inline fun <reified T> String.fromJson(): T = Gson().fromJson(this, T::class.java)
 
-class Memes(
+data class Memes(
     val memes: List<Meme>
 )
 
-class Meme(
+data class Meme(
     val author: String,
     val text: String?,
     val imgSrc: String?,
