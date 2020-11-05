@@ -28,7 +28,7 @@ class MemesRepository {
     private val mutex = Mutex()
 
     suspend fun currentMemes(): Memes = mutex.withLock {
-        Memes(memes.toList())
+        Memes(memes.toList().reversed())
     }
 
     suspend fun addMeme(meme: Meme): Unit = mutex.withLock {
@@ -74,7 +74,8 @@ fun main(args: Array<String>) {
         "task": "Pay waterbill",
         "description": "Pay water bill today",
     }"""
-    embeddedServer(Netty, 8080) {
+    val port = Integer.valueOf(System.getenv("PORT") ?: "8080")
+    embeddedServer(Netty, port) {
 
         install(CallLogging) {
             level = Level.INFO
