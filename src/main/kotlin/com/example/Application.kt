@@ -21,13 +21,13 @@ import io.ktor.http.withCharset
 import io.ktor.request.ApplicationReceiveRequest
 import io.ktor.request.contentCharset
 import io.ktor.request.receive
-import io.ktor.request.receiveMultipart
 import io.ktor.response.respond
 import io.ktor.response.respondText
 import io.ktor.routing.Routing
 import io.ktor.routing.delete
 import io.ktor.routing.get
 import io.ktor.routing.post
+import io.ktor.routing.put
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.collections.ConcurrentList
@@ -37,20 +37,19 @@ import io.ktor.utils.io.charsets.decode
 import io.ktor.utils.io.readRemaining
 import io.ktor.websocket.WebSockets
 import io.ktor.websocket.webSocket
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.litote.kmongo.coroutine.coroutine
 import org.litote.kmongo.eq
+import org.litote.kmongo.inc
 import org.litote.kmongo.reactivestreams.KMongo
 import org.slf4j.event.Level
 import java.time.Duration
-import java.util.UUID
+import java.util.*
 import java.util.logging.Logger
 
 class MemesRepository {
     val mongo = KMongo.createClient("mongodb+srv://Test1234:Test1234@cluster0.ashb0.mongodb.net/<dbname>?retryWrites=true&w=majority").coroutine
-        .getDatabase("memes")
-        .getCollection<Meme>("memes")
+            .getDatabase("memes")
+            .getCollection<Meme>("memes")
 
     suspend fun currentMemes(): Memes = Memes(mongo.find().toList())
 
@@ -62,6 +61,10 @@ class MemesRepository {
 
     suspend fun removeMeme(memeId: String) {
         mongo.deleteOne(Meme::id eq memeId)
+    }
+
+    suspend fun updateMeme(memeId: String) {
+        mongo.updateOne(Meme::id eq memeId, inc(Meme::likes, 1))
     }
 
     companion object {
@@ -137,6 +140,13 @@ fun main(args: Array<String>) {
                 call.respond(HttpStatusCode.OK)
             }
 
+            put("/meme/{memeId}") {
+                val memeId = call.parameters["memeId"]!!
+                memesRepository.updateMeme(memeId)
+                connectionsRepository.sendToAll()
+                call.respond(HttpStatusCode.OK)
+            }
+
             delete("/meme/{memeId}") {
                 val memeId = call.parameters["memeId"]!!
                 memesRepository.removeMeme(memeId)
@@ -148,7 +158,8 @@ fun main(args: Array<String>) {
                 connectionsRepository.addConnection(this)
                 connectionsRepository.send(this)
                 try {
-                    for (msg in incoming) { }
+                    for (msg in incoming) {
+                    }
                 } finally {
                     connectionsRepository.removeConnection(this)
                 }
@@ -158,7 +169,7 @@ fun main(args: Array<String>) {
 }
 
 data class Memes(
-    val memes: List<Meme>
+        val memes: List<Meme>
 )
 
 data class Meme(
@@ -167,6 +178,7 @@ data class Meme(
     val text: String?,
     val imgSrc: String?,
     val imgBase64: String?,
+    val likes: Integer?,
 )
 
 // Converters
@@ -183,12 +195,12 @@ object GsonConverter : ContentConverter {
         val request = context.subject
         val channel = request.value as? ByteReadChannel ?: return null
         val reader = (context.call.request.contentCharset() ?: Charsets.UTF_8).newDecoder()
-            .decode(channel.readRemaining()).reader()
+                .decode(channel.readRemaining()).reader()
         return globalGson.fromJson(reader, request.type.javaObjectType)
     }
 }
 
 val globalGson by lazy {
     Gson().newBuilder()
-        .serializeNulls().create()
+            .serializeNulls().create()
 }
