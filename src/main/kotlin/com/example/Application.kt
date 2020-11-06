@@ -47,7 +47,8 @@ import java.util.*
 import java.util.logging.Logger
 
 class MemesRepository {
-    val mongo = KMongo.createClient("mongodb+srv://Test1234:Test1234@cluster0.ashb0.mongodb.net/<dbname>?retryWrites=true&w=majority").coroutine
+    val mongo = KMongo
+            .createClient("mongodb+srv://Test1234:Test1234@cluster0.ashb0.mongodb.net/<dbname>?retryWrites=true&w=majority").coroutine
             .getDatabase("memes")
             .getCollection<Meme>("memes")
 
@@ -178,7 +179,7 @@ data class Meme(
     val text: String?,
     val imgSrc: String?,
     val imgBase64: String?,
-    val likes: Integer?,
+    val likes: Int = 0,
 )
 
 // Converters
