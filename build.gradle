@@ -23,7 +23,15 @@ jar {
     version = '1.0'
 }
 
-task stage(dependsOn: ['installDist'])
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions {
+        jvmTarget = "1.8"
+        useIR = true
+    }
+}
+
+task stage(dependsOn: ['build', 'clean'])
+build.mustRunAfter clean
 
 repositories {
     mavenCentral()
@@ -38,5 +46,6 @@ dependencies {
     implementation 'ch.qos.logback:logback-classic:1.2.1'
     implementation "io.ktor:ktor-websockets:$ktor_version"
     implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'org.litote.kmongo:kmongo-coroutine:4.0.1'
     testCompile 'junit:junit:4.12'
 }

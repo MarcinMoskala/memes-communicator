@@ -3,7 +3,6 @@ package com.example
 import com.google.gson.Gson
 import io.ktor.application.call
 import io.ktor.application.install
-import io.ktor.application.log
 import io.ktor.features.CallLogging
 import io.ktor.http.ContentType
 import io.ktor.http.cio.websocket.DefaultWebSocketSession
@@ -19,21 +18,22 @@ import io.ktor.websocket.WebSockets
 import io.ktor.websocket.webSocket
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.litote.kmongo.coroutine.coroutine
+import org.litote.kmongo.reactivestreams.KMongo
 import org.slf4j.event.Level
 import java.time.Duration
 import java.util.logging.Logger
 
 class MemesRepository {
-    private val memes = mutableListOf<Meme>()
-    private val mutex = Mutex()
+    val mongo = KMongo.createClient("mongodb+srv://Test1234:Test1234@cluster0.ashb0.mongodb.net/<dbname>?retryWrites=true&w=majority").coroutine
+        .getDatabase("memes")
+        .getCollection<Meme>("memes")
 
-    suspend fun currentMemes(): Memes = mutex.withLock {
-        Memes(memes.toList().reversed())
-    }
+    suspend fun currentMemes(): Memes = Memes(mongo.find().toList())
 
-    suspend fun addMeme(meme: Meme): Unit = mutex.withLock {
+    suspend fun addMeme(meme: Meme) {
         logger.info("Adding meme $meme")
-        memes += meme
+        mongo.insertOne(Meme("Michał", "Some text", "https://i1.kwejk.pl/k/obrazki/2020/11/gTMqPwhPEX4yF14S.jpg"))
     }
 
     companion object {
@@ -69,14 +69,8 @@ class ConnectionsService(private val memesRepository: MemesRepository) {
 }
 
 fun main(args: Array<String>) {
-    val jsonResponse = """{
-        "id": 1,
-        "task": "Pay waterbill",
-        "description": "Pay water bill today",
-    }"""
     val port = Integer.valueOf(System.getenv("PORT") ?: "8080")
     embeddedServer(Netty, port) {
-
         install(CallLogging) {
             level = Level.INFO
         }
@@ -91,9 +85,6 @@ fun main(args: Array<String>) {
 
             get("/") {
                 call.respondText("Hello World!", ContentType.Text.Plain)
-            }
-            get("/todo") {
-                call.respondText(jsonResponse, ContentType.Application.Json)
             }
             webSocket("/ws") {
                 connectionsRepository.addConnection(this)
