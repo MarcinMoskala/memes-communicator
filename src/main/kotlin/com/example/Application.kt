@@ -33,7 +33,7 @@ class MemesRepository {
 
     suspend fun addMeme(meme: Meme) {
         logger.info("Adding meme $meme")
-        mongo.insertOne(Meme("Michał", "Some text", "https://i1.kwejk.pl/k/obrazki/2020/11/gTMqPwhPEX4yF14S.jpg"))
+        mongo.insertOne(meme)
     }
 
     companion object {
