@@ -46,6 +46,7 @@ dependencies {
     implementation 'ch.qos.logback:logback-classic:1.2.1'
     implementation "io.ktor:ktor-websockets:$ktor_version"
     implementation 'com.google.code.gson:gson:2.8.5'
+    implementation "io.ktor:ktor-client-json-jvm:$ktor_version"
     implementation 'org.litote.kmongo:kmongo-coroutine:4.0.1'
     testCompile 'junit:junit:4.12'
 }
